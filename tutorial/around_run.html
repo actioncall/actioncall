@@ -1,0 +1,257 @@
+{% extends "base/base_phaser.html" %}
+{% load static %}
+{% block js %}
+    {{block.super}}
+<script>
+let game;
+let gameOptions = {    
+    bigCircleRadius: 300, //원의 반지름
+    bigCircleThickness: 20,//원의 두께(픽셀)
+    playerRadius: 18, // 플레이어의 반지름(픽셀)
+    playerSpeed: 0.6, // 플레이어 속도, 프레임당 각도
+    worldGravity: 0.8, //중력
+    jumpForce: [12, 8] // 싱글, 2단뛰기 점프파워
+}
+window.onload = function() {
+    let config = {
+        type: Phaser.CANVAS,
+        backgroundColor: 0x000000,
+        scale: {
+            mode: Phaser.Scale.FIT,
+            autoCenter: Phaser.Scale.CENTER_BOTH,
+            parent: "theGame",
+            width: 800,
+            height: 800
+        },
+        scene: playGame
+    }
+    game = new Phaser.Game(config);
+    window.focus();
+}
+
+let stage = 1;
+
+class playGame extends Phaser.Scene{
+    constructor(){
+        super("PlayGame");
+    }
+
+    preload(){
+        //this.load.image("player", "https://actioncall.github.io/actioncall/assets/img/around_eyes.png");
+        this.load.audio("bong_001", "https://actioncall.github.io/actioncall/assets/audio/bong_001.ogg");
+        this.load.spritesheet('player','https://actioncall.github.io/actioncall/assets/img/p_run.png', { frameWidth: 37, frameHeight: 46 });
+        //this.load.image("particle1", "https://actioncall.github.io/actioncall/assets/img/blue.ogg");
+        this.load.image("bg1", "https://actioncall.github.io/actioncall/assets/img/bg1.png");        
+        
+    }   
+    create(){
+        this.jumpOgg = this.sound.add('bong_001');
+        this.add.image(game.config.width / 2, game.config.height / 2,'bg1');
+
+        // 큰 원 그리기
+        //this.bigCircle = this.add.graphics();
+        //this.bigCircle.lineStyle(gameOptions.bigCircleThickness, 0xffffff);
+        //this.bigCircle.strokeCircle(game.config.width / 2, game.config.height / 2, gameOptions.bigCircleRadius);        
+        
+        //플레이어 추가
+        this.distanceFromCenter = gameOptions.bigCircleRadius - gameOptions.playerRadius - gameOptions.bigCircleThickness / 2; //원 중앙과의 거리
+        this.player = this.add.sprite(game.config.width / 2, game.config.height / 2 - this.distanceFromCenter, "player"); 
+        
+        this.anims.create({
+            key: 'run',
+            frames: this.anims.generateFrameNumbers('player', { start: 0, end: 5 }),
+            frameRate: 10,
+            repeat: -1
+        });
+        this.player.anims.play('run');
+
+        this.anims.create({
+            key: 'jump',
+            frames: this.anims.generateFrameNumbers('player', { start: 6, end: 8 }),
+            frameRate: 10,
+            repeat: -1
+        });
+        
+
+        //this.player.displayWidth = gameOptions.playerRadius * 2;
+        //this.player.displayHeight = gameOptions.playerRadius * 2;
+        //플레이어 셋팅
+        this.player.currentAngle = -90;   // 플레이어 현재 각도
+        this.player.previousAngle = this.player.currentAngle; // 플레이어 이전 각도         
+        this.player.jumpOffset = 0; // 점프 오프셋, 점프 중 지면과 거리
+        this.player.jumps = 0; //점프 횟수                 
+        this.player.jumpForce = 0; // 현재 점프포스파워
+
+
+         this.input.on("pointerdown", function(){
+            // 2회 미만 점프
+            if(this.player.jumps < 2){
+                this.player.anims.play('jump');
+                this.jumpOgg.play();           
+                this.player.jumps ++;                                
+                this.player.jumpForce = gameOptions.jumpForce[this.player.jumps - 1]; //jumpForce: [12, 8] 1회,2회
+                
+            }
+
+        }, this);  
+        
+        // 그려진 모든 호를 저장할 배열
+        this.paintedArcs = [];     
+        
+        //지나간 원을 샐칠할 객체
+        this.highlightCircle = this.add.graphics();
+               
+        // 플레이어 진행 상황을 표시하는 텍스트
+        this.levelText = this.add.text(game.config.width / 2, (game.config.height / 2), "", {
+            fontFamily: "Arial",
+            fontSize: 69,
+            color: "#ffffff"
+        });
+        this.levelText.setOrigin(0.5);
+        this.stageText = this.add.text(game.config.width / 2, 50, "STAGE "+stage, {
+            fontFamily: "Arial",
+            fontSize: 50,
+            color: "#ffffff"
+        });
+        this.stageText.setOrigin(0.5);
+        
+
+    }
+    update(){
+        this.stageText.setText("STAGE "+stage);
+
+        if(this.player.jumps > 0){            
+            this.player.jumpOffset += this.player.jumpForce;  //점프오프셋에 점프파워 추가      
+            this.player.jumpForce -= gameOptions.worldGravity; //중력을 통해 점프력 감소
+             
+            // 점프오프셋이 다 감소하여 0보다 작으면 착지 상태
+            if(this.player.jumpOffset < 0){                
+                //점프 오프셋, 점프 횟수, 점프 포스 초기화
+                this.player.jumpOffset = this.player.jumps = this.player.jumpForce =  0;
+                this.player.anims.play('run');                  
+            }
+        }
+        //console.log("this.player.angle : "+this.player.angle);
+        
+        // 이전 각도를 현재 각도로 업데이트
+        this.player.previousAngle = this.player.currentAngle;
+        
+        // 현재 각도에 플레이어 속도 추가
+        this.player.currentAngle = Phaser.Math.Angle.WrapDegrees(this.player.currentAngle + gameOptions.playerSpeed);
+
+        // 점프 오프셋으로 플레이어 위치 결정 
+        let distanceFromCenter = this.distanceFromCenter - this.player.jumpOffset;        
+
+        // 삼각법을 사용하여 플레이어 위치 지정
+        let radians = Phaser.Math.DegToRad(this.player.currentAngle); //라디안으로 변환
+        this.player.x = game.config.width / 2 + distanceFromCenter * Math.cos(radians);
+        this.player.y = game.config.height / 2 + distanceFromCenter * Math.sin(radians);
+        //console.log("this.player.currentAngle : "+this.player.currentAngle+" / radians :"+radians+" / "+Math.sin(radians))
+        
+        //현재 각도에 맞춰 캐릭터 회전
+        this.player.angle = this.getGameAngle(this.player.currentAngle)-150;
+        
+        
+        //회전 시키기(삼각법)
+        //let revolutions = gameOptions.bigCircleRadius / gameOptions.playerRadius + 1;
+        //this.player.angle = -this.player.currentAngle * revolutions;
+        
+        //점프하지 않을때
+        if(this.player.jumpOffset == 0){
+            this.paintedRatio = 0;
+            //Phaser 각도를 더 읽기 쉬운 각도로 변환합니다. 0:위,90:오른, 180:아래, 270:왼
+            let currentAngle = this.getGameAngle(this.player.currentAngle);
+            let previousAngle = this.getGameAngle(this.player.previousAngle);
+            
+            
+            if(currentAngle >= previousAngle){
+                // paintedArcs 배열에 추가
+                this.paintedArcs.push([previousAngle, currentAngle]);
+            }else{                 
+                // 플레이어가 360보다 작은 값에서 360보다 큰 값, 즉 0으로 전달된 경우                
+                this.paintedArcs.push([previousAngle, 360]);
+                this.paintedArcs.push([0, currentAngle]);
+            }
+            
+            // 색칠할 준비
+            this.highlightCircle.clear();
+            this.highlightCircle.lineStyle(gameOptions.bigCircleThickness, 0xffffff);
+            
+            // 겹치는 원을 병합
+            this.paintedArcs = this.mergeIntervals(this.paintedArcs);
+            
+            // 배열에 저장된..
+            this.paintedArcs.forEach(function(i){
+                // 원 길이에 따라 도장 비율 값 증가
+                this.paintedRatio += (i[1] - i[0]);                
+ 
+                // 지나간 자리의 색을 칠한다.
+                this.highlightCircle.beginPath();
+                this.highlightCircle.arc(game.config.width / 2, game.config.height / 2, gameOptions.bigCircleRadius, Phaser.Math.DegToRad(i[0] - 90), Phaser.Math.DegToRad(i[1] - 90), false);
+                this.highlightCircle.strokePath();
+            }.bind(this));
+
+            // 모든 원 길이의 합을 0 -> 100 값으로 변환
+            this.paintedRatio = Math.round(this.paintedRatio * 100 / 360);
+ 
+            // 플레이어 진행률 텍스트 업데이트
+            this.levelText.setText(this.paintedRatio + "%");
+ 
+            // 만약 플레이어가 원 전체를 칠했다면...
+            if(this.paintedRatio == 100){          
+                this.scene.start("PlayGame");
+                stage +=1;      
+                // 1초 후에 게임을 다시 시작합니다.
+                {% comment %} this.time.addEvent({
+                    delay: 1000,
+                    callbackScope: this,
+                    callback: function(){
+                        this.scene.start("PlayGame");
+                        stage +=1;
+                    }
+                }); {% endcomment %}
+            }
+
+        }
+        
+    }
+    // 페이저 각도를 보다 읽기 쉬운 각도로 변환하는 방법
+    getGameAngle(angle){
+        let gameAngle = angle + 90;
+        if(gameAngle < 0){
+            gameAngle = 360 + gameAngle
+        }
+        return gameAngle;
+    }
+    mergeIntervals(intervals){
+        if(intervals.length <= 1){
+            return intervals;
+        }
+        let stack = [];
+        let top = null;
+        intervals = intervals.sort(function(a, b){
+            return a[0] - b[0]
+        });
+        stack.push(intervals[0]);
+        for(let i = 1; i < intervals.length; i++){
+            top = stack[stack.length - 1];
+            if(top[1] < intervals[i][0]){
+                stack.push(intervals[i]);
+            }
+            else{
+                if (top[1] < intervals[i][1]){
+                    top[1] = intervals[i][1];
+                    stack.pop();
+                    stack.push(top);
+                }
+            }
+        }
+        return stack;
+    }
+}
+
+
+        //this.player.displayWidth = gameOptions.playerRadius * 2;
+        //this.player.displayHeight = gameOptions.playerRadius * 2;
+</script>
+{% endblock js %}
